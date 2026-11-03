@@ -25,5 +25,4 @@ export const usersRepository = {
   isMobileTaken(mobile: string) {
     return sql`SELECT 1 FROM users WHERE mobile=${mobile}`;
   },
-  // These mutations stay in the caller's transaction for atomic revocation.
 };
