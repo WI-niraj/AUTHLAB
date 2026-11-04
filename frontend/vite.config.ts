@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react';
 // without exposing the session token to JavaScript.
 export default defineConfig({
   plugins: [react()],
+  preview: {
+    allowedHosts: ["authlab-o8wi.onrender.com"],
+  },
   server: {
     host: 'localhost',
     port: 3000,
