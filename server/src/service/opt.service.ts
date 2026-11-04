@@ -3,27 +3,28 @@ import {
     randomInt,
     randomUUID,
     timingSafeEqual,
-} from 'node:crypto';
+} from "node:crypto";
 
-import { sql } from '../db/client.js';
-import { sha256 } from '../lib/security.js';
+import { sql } from "../db/client.js";
+import { sha256 } from "../lib/security.js";
+import { sendSmsOtp, verifySmsOtp } from "./smsotp.js";
 
 export type OtpPurpose =
-    | 'register'
-    | 'reset_password'
-    | 'change_mobile';
+    | "register"
+    | "reset_password"
+    | "change_mobile";
 
 const OTP_EXPIRY_MINUTES = 5;
 const MAX_ATTEMPTS = 5;
 
-// Generate a secure six-digit OTP
+const TWILIO_HASH = sha256("AUTHLAB_TWILIO_VERIFY_V1");
+
 function generateOtp(): string {
     return randomInt(0, 1_000_000)
         .toString()
-        .padStart(6, '0');
+        .padStart(6, "0");
 }
 
-// Compare hashed OTP values
 function verifyHash(
     storedHash: string,
     providedHash: string
@@ -36,22 +37,86 @@ function verifyHash(
     }
 
     return timingSafeEqual(
-        Buffer.from(storedHash, 'hex'),
-        Buffer.from(providedHash, 'hex')
+        Buffer.from(storedHash, "hex"),
+        Buffer.from(providedHash, "hex")
     );
 }
 
-// Create a new OTP challenge
+function isProduction(): boolean {
+    return process.env.NODE_ENV === "production";
+}
+
+function isTwilioEnabled(): boolean {
+    const provider = process.env.OTP_PROVIDER?.trim().toLowerCase();
+
+    console.log("[OTP DEBUG] Provider:", provider ?? "not configured");
+    console.log("[OTP DEBUG] Twilio configured:", {
+        accountSid: Boolean(process.env.TWILIO_ACCOUNT_SID),
+        authToken: Boolean(process.env.TWILIO_AUTH_TOKEN),
+        serviceSid: Boolean(process.env.TWILIO_VERIFY_SERVICE_SID),
+    });
+
+    return provider === "twilio";
+}
+
 export async function createOtp(
     userId: string,
     mobile: string,
     purpose: OtpPurpose
 ): Promise<void> {
-    const otp = generateOtp();
-    const hash = sha256(otp);
+    let hash: string;
+    let localOtp: string | null = null;
+
+    // STEP 1: Try Twilio first when enabled.
+    if (isTwilioEnabled()) {
+        try {
+            const sent = await sendSmsOtp(mobile);
+
+            if (!sent) {
+                throw new Error("Twilio did not accept OTP request");
+            }
+
+            hash = TWILIO_HASH;
+
+            console.log(
+                `[OTP] Twilio SMS requested for ${purpose}`
+            );
+        } catch (error: unknown) {
+            const err = error as {
+                code?: number;
+                status?: number;
+                message?: string;
+            };
+
+            console.error("[TWILIO ERROR]", {
+                code: err.code,
+                status: err.status,
+                message: err.message,
+            });
+
+            if (isProduction()) {
+                throw new Error("Unable to deliver OTP via SMS");
+            }
+
+            console.warn(
+                "[OTP] Falling back to terminal OTP"
+            );
+
+            localOtp = generateOtp();
+            hash = sha256(localOtp);
+        }
+    } else {
+        if (isProduction()) {
+            throw new Error(
+                "Local OTP provider is disabled in production"
+            );
+        }
+
+        localOtp = generateOtp();
+        hash = sha256(localOtp);
+    }
 
     await sql.begin(async (tx) => {
-        // Invalidate previous unconsumed challenges
         await tx`
       UPDATE otp_challenges
       SET consumed_at = NOW()
@@ -60,7 +125,6 @@ export async function createOtp(
         AND consumed_at IS NULL
     `;
 
-        // Store the new OTP hash
         await tx`
       INSERT INTO otp_challenges (
         id,
@@ -83,16 +147,13 @@ export async function createOtp(
     `;
     });
 
-    // Local development only
-    if (process.env.NODE_ENV !== 'production') {
-        console.log(`[DEV OTP] ${purpose}: ${otp}`);
-    } else {
-        // A real SMS provider must be implemented before production.
-        throw new Error('OTP SMS delivery is not configured');
+    if (localOtp !== null) {
+        console.log(
+            `[DEV OTP] ${purpose}: ${localOtp}`
+        );
     }
 }
 
-// Verify OTP and mark it as consumed
 export async function consumeOtp(
     userId: string,
     mobile: string,
@@ -119,14 +180,34 @@ export async function consumeOtp(
 
         const challenge = rows[0];
 
-        if (!challenge || challenge.attempts >= MAX_ATTEMPTS) {
+        if (
+            !challenge ||
+            challenge.attempts >= MAX_ATTEMPTS
+        ) {
             return false;
         }
 
-        const valid = verifyHash(
-            challenge.code_hash,
-            sha256(code)
-        );
+        let valid = false;
+
+        if (challenge.code_hash === TWILIO_HASH) {
+            try {
+                valid = await verifySmsOtp(mobile, code);
+            } catch (error) {
+                console.error(
+                    "[OTP] Twilio verification unavailable:",
+                    error
+                );
+
+                throw new Error(
+                    "SMS verification temporarily unavailable"
+                );
+            }
+        } else {
+            valid = verifyHash(
+                challenge.code_hash,
+                sha256(code)
+            );
+        }
 
         if (!valid) {
             await tx`

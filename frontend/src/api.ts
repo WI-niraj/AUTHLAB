@@ -36,11 +36,17 @@ type ErrorPayload = {
   } | string;
 };
 
+// Backend API URL from Render environment variables.
+// Falls back to relative URLs for local Vite proxy development.
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || ''
+).replace(/\/+$/, '');
+
 export async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
     headers: {
