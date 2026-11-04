@@ -2,12 +2,15 @@
 import Fastify from 'fastify';
 
 import { config } from './src/config/index.js';
+
 import {
   HttpError,
   rejectUnsafeOrigin,
 } from './src/lib/http.js';
 
 import { routes } from './src/modules/routes.js';
+
+import { setupPayloadEncryption } from './src/lib/payload-crypto.js';
 
 export function makeApp() {
   const app = Fastify({
@@ -21,11 +24,11 @@ export function makeApp() {
     bodyLimit: 16 * 1024,
   });
 
-  // 1. Security and CORS
   app.addHook('onRequest', async (req, reply) => {
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Referrer-Policy', 'no-referrer');
     reply.header('Cache-Control', 'no-store');
+
     reply.header(
       'Content-Security-Policy',
       "default-src 'none'; frame-ancestors 'none'"
@@ -38,31 +41,48 @@ export function makeApp() {
         });
       }
 
-      reply.header('Access-Control-Allow-Origin', config.origin);
-      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header(
+        'Access-Control-Allow-Origin',
+        config.origin
+      );
+
+      reply.header(
+        'Access-Control-Allow-Credentials',
+        'true'
+      );
+
       reply.header(
         'Access-Control-Allow-Methods',
         'GET,POST,DELETE,OPTIONS'
       );
+
       reply.header(
         'Access-Control-Allow-Headers',
         'Content-Type'
       );
+
       reply.header('Vary', 'Origin');
 
       return reply.code(204).send();
     }
 
     if (req.headers.origin === config.origin) {
-      reply.header('Access-Control-Allow-Origin', config.origin);
-      reply.header('Access-Control-Allow-Credentials', 'true');
+      reply.header(
+        'Access-Control-Allow-Origin',
+        config.origin
+      );
+
+      reply.header(
+        'Access-Control-Allow-Credentials',
+        'true'
+      );
+
       reply.header('Vary', 'Origin');
     }
 
     rejectUnsafeOrigin(req);
   });
 
-  // 2. Error handler (registered before listening)
   app.setErrorHandler((err: unknown, req, reply) => {
     if (err instanceof HttpError) {
       return reply.code(err.status).send({
@@ -103,7 +123,8 @@ export function makeApp() {
     });
   });
 
-  // 3. Register application routes
+  setupPayloadEncryption(app);
+
   app.register(routes);
 
   return app;
