@@ -1,4 +1,6 @@
 
+import { encryptSensitive } from './crypto';
+
 export type User = {
   id: string;
   displayName: string;
@@ -28,7 +30,10 @@ export class ApiError extends Error {
 
 type ErrorPayload = {
   message?: string;
-  error?: { message?: string; code?: string } | string;
+  error?: {
+    message?: string;
+    code?: string;
+  } | string;
 };
 
 // Backend API URL from Render environment variables.
@@ -71,7 +76,9 @@ export async function request<T>(
     const error = body?.error;
 
     const message =
-      (typeof error === 'object' ? error?.message : error) ||
+      (typeof error === 'object'
+        ? error?.message
+        : error) ||
       body?.message ||
       `Request failed (${response.status})`;
 
@@ -90,76 +97,134 @@ export const api = {
   health: () =>
     request<{ status: string }>('/health'),
 
-  register: (body: {
+  // REGISTER - Encrypt password
+  register: async (body: {
     displayName: string;
     mobile: string;
     password: string;
   }) =>
-    request<{ message: string }>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+    request<{ message: string }>(
+      '/api/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          displayName: body.displayName,
+          mobile: body.mobile,
+          password: await encryptSensitive(body.password),
+        }),
+      }
+    ),
 
+  // RESEND OTP - No sensitive code submitted
   resendOtp: (mobile: string) =>
-    request<{ message: string }>('/api/auth/resend-otp', {
-      method: 'POST',
-      body: JSON.stringify({ mobile }),
-    }),
+    request<{ message: string }>(
+      '/api/auth/resend-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ mobile }),
+      }
+    ),
 
-  verifyMobile: (mobile: string, code: string) =>
-    request<{ message: string }>('/api/auth/verify-mobile', {
-      method: 'POST',
-      body: JSON.stringify({ mobile, code }),
-    }),
+  // VERIFY MOBILE - Encrypt OTP
+  verifyMobile: async (mobile: string, code: string) =>
+    request<{ message: string }>(
+      '/api/auth/verify-mobile',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          mobile,
+          code: await encryptSensitive(code),
+        }),
+      }
+    ),
 
-  login: (mobile: string, password: string) =>
-    request<{ message: string }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ mobile, password }),
-    }),
+  // LOGIN - Encrypt password
+  login: async (mobile: string, password: string) =>
+    request<{ message: string }>(
+      '/api/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          mobile,
+          password: await encryptSensitive(password),
+        }),
+      }
+    ),
 
   me: () =>
     request<{ user: User }>('/api/auth/me'),
 
   logout: () =>
-    request<{ message: string }>('/api/auth/logout', {
-      method: 'POST',
-    }),
+    request<{ message: string }>(
+      '/api/auth/logout',
+      { method: 'POST' }
+    ),
 
+  // FORGOT PASSWORD - Only mobile number
   forgotPassword: (mobile: string) =>
-    request<{ message: string }>('/api/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ mobile }),
-    }),
-
-  verifyResetOtp: (mobile: string, code: string) =>
-    request<{ resetToken: string; expiresIn: number }>(
-      '/api/auth/verify-reset-otp',
+    request<{ message: string }>(
+      '/api/auth/forgot-password',
       {
         method: 'POST',
-        body: JSON.stringify({ mobile, code }),
+        body: JSON.stringify({ mobile }),
       }
     ),
 
-  resetPassword: (
+  // VERIFY RESET OTP - Encrypt OTP
+  verifyResetOtp: async (
+    mobile: string,
+    code: string
+  ) =>
+    request<{
+      resetToken: string;
+      expiresIn: number;
+    }>(
+      '/api/auth/verify-reset-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          mobile,
+          code: await encryptSensitive(code),
+        }),
+      }
+    ),
+
+  // RESET PASSWORD - Encrypt new password
+  resetPassword: async (
     resetToken: string,
     newPassword: string
   ) =>
-    request<{ message: string }>('/api/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ resetToken, newPassword }),
-    }),
+    request<{ message: string }>(
+      '/api/auth/reset-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          resetToken,
+          newPassword: await encryptSensitive(newPassword),
+        }),
+      }
+    ),
 
-  changePassword: (
+  // CHANGE PASSWORD - Encrypt both passwords
+  changePassword: async (
     currentPassword: string,
     newPassword: string
   ) =>
-    request<{ message: string }>('/api/account/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    }),
+    request<{ message: string }>(
+      '/api/account/change-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword:
+            await encryptSensitive(currentPassword),
+          newPassword:
+            await encryptSensitive(newPassword),
+        }),
+      }
+    ),
 
-  requestMobileChange: (
+  // MOBILE CHANGE - Encrypt current password
+  requestMobileChange: async (
     currentPassword: string,
     newMobile: string
   ) =>
@@ -168,13 +233,15 @@ export const api = {
       {
         method: 'POST',
         body: JSON.stringify({
-          currentPassword,
+          currentPassword:
+            await encryptSensitive(currentPassword),
           newMobile,
         }),
       }
     ),
 
-  confirmMobileChange: (
+  // CONFIRM MOBILE CHANGE - Encrypt OTP
+  confirmMobileChange: async (
     newMobile: string,
     code: string
   ) =>
@@ -184,7 +251,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({
           newMobile,
-          code,
+          code: await encryptSensitive(code),
         }),
       }
     ),

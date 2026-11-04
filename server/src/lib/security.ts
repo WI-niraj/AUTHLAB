@@ -6,7 +6,6 @@ import {
     timingSafeEqual,
 } from 'node:crypto';
 
-// Password hashing settings
 const KEY_LENGTH = 64;
 const SCRYPT_OPTIONS = {
     N: 16384,
@@ -15,12 +14,10 @@ const SCRYPT_OPTIONS = {
     maxmem: 64 * 1024 * 1024,
 };
 
-// Validate mobile number (international format)
 export function validMobile(mobile: string): boolean {
     return /^\+[1-9][0-9]{7,14}$/.test(mobile);
 }
 
-// Validate password strength
 export function validPassword(password: string): boolean {
     return (
         typeof password === 'string' &&
@@ -31,7 +28,6 @@ export function validPassword(password: string): boolean {
     );
 }
 
-// Internal function to derive a password hash
 function deriveKey(
     password: string,
     salt: string
@@ -54,7 +50,6 @@ function deriveKey(
     });
 }
 
-// Hash a password before storing it
 export async function hashPassword(
     password: string
 ): Promise<string> {
@@ -65,7 +60,6 @@ export async function hashPassword(
     return `scrypt$${salt}$${hash.toString('hex')}`;
 }
 
-// Verify a password against its stored hash
 export async function verifyPassword(
     storedHash: string,
     password: string
@@ -93,20 +87,16 @@ export async function verifyPassword(
     }
 }
 
-// Generate a secure random token
 export function randomToken(): string {
     return randomBytes(32).toString('base64url');
 }
 
-// Generate SHA-256 digest
 export function sha256(value: string): string {
     return createHash('sha256')
         .update(value)
         .digest('hex');
 }
 
-// Dummy hash used when a user does not exist.
-// Helps reduce timing differences during login.
 export const dummyPasswordHash = hashPassword(
     'DummyPassword123456'
 );

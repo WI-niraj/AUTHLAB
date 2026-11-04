@@ -17,7 +17,6 @@ export async function limit(
     const key = `${action}:${identifier}`;
     const now = Date.now();
 
-    // Remove expired entries
     for (const [storedKey, entry] of requests) {
         if (entry.expiresAt <= now) {
             requests.delete(storedKey);
@@ -45,6 +44,5 @@ export async function limit(
         );
     }
 
-    // Count request
     entry.count += 1;
 }
