@@ -353,7 +353,25 @@ function AppShell({ auth }: { auth: AuthContext }) {
     </aside>
     <main className="workspace"><header className="topbar"><button className="menu-button" onClick={() => setMenu(true)} aria-label="Open navigation"><Menu size={22} /></button>
       <div className="topbar-breadcrumb">Workspace <ChevronRight size={14} /> <strong>AuthLab</strong></div>
-      <div className="topbar-right"><span className="topbar-status"><span /> System ready</span><span className="avatar-small top-avatar">{user.displayName.charAt(0).toUpperCase()}</span></div>
+      <div className="topbar-right">
+        <span className="topbar-status">
+          <span /> System ready
+        </span>
+
+        <span className="avatar-small top-avatar">
+          {user.displayName.charAt(0).toUpperCase()}
+        </span>
+
+        <button
+          type="button"
+          className="btn btn-outline btn-small"
+          onClick={() => void signOut()}
+          disabled={signingOut}
+        >
+          {signingOut ? <Spinner /> : <LogOut size={16} />}
+          <span>{signingOut ? "Signing out..." : "Logout"}</span>
+        </button>
+      </div>
     </header>
       <div className="workspace-content"><Routes>
         <Route index element={<Dashboard user={user} />} />
