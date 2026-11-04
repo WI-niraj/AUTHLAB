@@ -1,6 +1,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../config/index.js';
+const isProduction = process.env.NODE_ENV === 'production';
 
 const COOKIE_NAME = 'authlab_session';
 
@@ -65,7 +66,7 @@ export function setSessionCookie(
             `${COOKIE_NAME}=${encodeURIComponent(token)}`,
             'HttpOnly',
             'Path=/',
-            'SameSite=Lax',
+            isProduction ? 'SameSite=None' : 'SameSite=Lax',
             ...(config.isProduction ? ['Secure'] : []),
         ].join('; ')
     );
@@ -80,7 +81,7 @@ export function clearSessionCookie(reply: FastifyReply): void {
             'HttpOnly',
             'Path=/',
             'Max-Age=0',
-            'SameSite=Lax',
+            isProduction ? 'SameSite=None' : 'SameSite=Lax',
             ...(config.isProduction ? ['Secure'] : []),
         ].join('; ')
     );
