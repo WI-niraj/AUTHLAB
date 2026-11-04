@@ -40,13 +40,14 @@ type JsonBody = Record<string, unknown>;
 
 let privateKey: KeyObject | null = null;
 
+
 function loadPrivateKey(): KeyObject {
     if (privateKey) {
         return privateKey;
     }
 
     const encoded =
-        process.env.PAYLOAD_RSA_PRIVATE_KEY_BASE64;
+        process.env.PAYLOAD_RSA_PRIVATE_KEY_BASE64?.trim();
 
     if (!encoded) {
         throw new Error(
@@ -54,18 +55,46 @@ function loadPrivateKey(): KeyObject {
         );
     }
 
-    const pem = Buffer.from(encoded, 'base64').toString(
-        'utf8'
-    );
+    try {
+        if (
+            !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) ||
+            encoded.length % 4 !== 0
+        ) {
+            throw new Error('Invalid Base64 encoding');
+        }
 
-    privateKey = createPrivateKey(pem);
+        const pem = Buffer.from(
+            encoded,
+            'base64'
+        ).toString('utf8');
 
-    if (privateKey.asymmetricKeyType !== 'rsa') {
-        throw new Error('RSA private key is required');
+        if (
+            !pem.includes('-----BEGIN PRIVATE KEY-----') ||
+            !pem.includes('-----END PRIVATE KEY-----')
+        ) {
+            throw new Error('Invalid PKCS8 PEM format');
+        }
+
+        const key = createPrivateKey({
+            key: pem,
+            format: 'pem',
+        });
+
+        if (key.asymmetricKeyType !== 'rsa') {
+            throw new Error('Key must be RSA');
+        }
+
+        privateKey = key;
+
+        return key;
+    } catch {
+        throw new Error(
+            'Invalid PAYLOAD_RSA_PRIVATE_KEY_BASE64. ' +
+            'Generate a valid PKCS8 RSA private key.'
+        );
     }
-
-    return privateKey;
 }
+
 
 function getPublicKeyBase64(): string {
     const publicKey = createPublicKey(loadPrivateKey());
@@ -127,12 +156,10 @@ function decryptSensitive(value: unknown): string {
 export function setupPayloadEncryption(
     app: FastifyInstance
 ): void {
-    // Fail startup if the private key is missing or invalid.
     loadPrivateKey();
 
     const publicKey = getPublicKeyBase64();
 
-    // Frontend fetches this key before encrypting.
     app.get('/api/crypto/public-key', async (_request, reply) => {
         return reply
             .header('Cache-Control', 'no-store')
@@ -142,7 +169,6 @@ export function setupPayloadEncryption(
             });
     });
 
-    // Runs after JSON parsing and before schema validation.
     app.addHook('preValidation', async (request, reply) => {
         const pathname = request.url.split('?')[0];
 
@@ -173,8 +199,6 @@ export function setupPayloadEncryption(
         const data = body as JsonBody;
 
         try {
-            // Decrypt all required fields before passing
-            // the request to the existing route handlers.
             const decrypted: JsonBody = {};
 
             for (const field of fields) {
