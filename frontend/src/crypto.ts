@@ -1,5 +1,12 @@
 
-const PUBLIC_KEY_URL = '/api/crypto/public-key';
+
+const API_BASE_URL = (
+    import.meta.env.VITE_API_URL || ''
+).replace(/\/+$/, '');
+
+const PUBLIC_KEY_URL =
+    `${API_BASE_URL}/api/crypto/public-key`;
+
 const ENCRYPTION_PREFIX = 'enc:v1:';
 
 let cachedKeyPromise: Promise<CryptoKey> | null = null;
