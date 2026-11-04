@@ -1,12 +1,9 @@
 
 import { makeApp } from './app.js';
 import { config } from './src/config/index.js';
-import { setupPayloadEncryption } from './src/lib/payload-crypto.js';
 
+// makeApp() already registers RSA encryption
 const app = makeApp();
-
-// Register RSA encryption and decryption
-setupPayloadEncryption(app);
 
 async function startServer() {
     try {
@@ -19,7 +16,7 @@ async function startServer() {
             `AuthLab running at http://${config.host}:${config.port}`
         );
 
-        console.log('RSA payload encryption enabled');
+        console.log('RSA encryption enabled successfully');
     } catch (error) {
         app.log.error(error);
         process.exit(1);
