@@ -41,59 +41,86 @@ type JsonBody = Record<string, unknown>;
 let privateKey: KeyObject | null = null;
 
 
+
 function loadPrivateKey(): KeyObject {
     if (privateKey) {
         return privateKey;
     }
 
-    const encoded =
-        process.env.PAYLOAD_RSA_PRIVATE_KEY_BASE64?.trim();
+    const raw =
+        process.env.PAYLOAD_RSA_PRIVATE_KEY_BASE64;
 
-    if (!encoded) {
+    if (!raw) {
         throw new Error(
-            'PAYLOAD_RSA_PRIVATE_KEY_BASE64 is missing'
+            'RSA_CONFIG_MISSING: Private key environment variable is missing.'
         );
     }
 
+    console.log('RSA configuration check:', {
+        present: true,
+        valueLength: raw.length,
+        hasWhitespace: /\s/.test(raw),
+    });
+
+    // Remove accidental whitespace or line breaks
+    const encoded = raw.replace(/\s/g, '');
+
+    // Validate Base64
+    if (
+        !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) ||
+        encoded.length % 4 !== 0
+    ) {
+        throw new Error(
+            'RSA_INVALID_BASE64: Environment variable is not valid Base64.'
+        );
+    }
+
+    // Decode Base64
+    const pem = Buffer.from(
+        encoded,
+        'base64'
+    ).toString('utf8');
+
+    // Check PEM format without printing private key
+    const validPem =
+        pem.startsWith('-----BEGIN PRIVATE KEY-----') &&
+        pem.trimEnd().endsWith('-----END PRIVATE KEY-----');
+
+    if (!validPem) {
+        throw new Error(
+            'RSA_INVALID_PEM: Decoded value is not a PKCS8 private key.'
+        );
+    }
+
+    // Load RSA private key
     try {
-        if (
-            !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) ||
-            encoded.length % 4 !== 0
-        ) {
-            throw new Error('Invalid Base64 encoding');
-        }
-
-        const pem = Buffer.from(
-            encoded,
-            'base64'
-        ).toString('utf8');
-
-        if (
-            !pem.includes('-----BEGIN PRIVATE KEY-----') ||
-            !pem.includes('-----END PRIVATE KEY-----')
-        ) {
-            throw new Error('Invalid PKCS8 PEM format');
-        }
-
         const key = createPrivateKey({
             key: pem,
             format: 'pem',
         });
 
         if (key.asymmetricKeyType !== 'rsa') {
-            throw new Error('Key must be RSA');
+            throw new Error('Expected RSA private key');
         }
 
         privateKey = key;
 
+        console.log('RSA private key loaded successfully');
+
         return key;
-    } catch {
+    } catch (error) {
+        // Do not log private key or PEM contents.
+        console.error(
+            'RSA key parsing failed:',
+            error instanceof Error ? error.message : 'Unknown error'
+        );
+
         throw new Error(
-            'Invalid PAYLOAD_RSA_PRIVATE_KEY_BASE64. ' +
-            'Generate a valid PKCS8 RSA private key.'
+            'RSA_PARSE_FAILED: Unable to parse RSA private key.'
         );
     }
 }
+
 
 
 function getPublicKeyBase64(): string {
