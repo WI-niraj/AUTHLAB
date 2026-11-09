@@ -5,6 +5,7 @@ import { authRoutes } from './auth/auth.routes.js';
 import { passwordRoutes } from './password/password.routes.js';
 import { accountRoutes } from './account/account.routes.js';
 import { sessionRoutes } from './sessions/sessions.routes.js';
+import { adminRoutes } from './admin/admin.routes.js';
 
 export async function routes(app: FastifyInstance) {
 
@@ -28,4 +29,5 @@ export async function routes(app: FastifyInstance) {
   await app.register(passwordRoutes);
   await app.register(accountRoutes);
   await app.register(sessionRoutes);
+  await app.register(adminRoutes);
 }

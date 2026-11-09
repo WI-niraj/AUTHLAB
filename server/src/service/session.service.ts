@@ -5,6 +5,8 @@ import type { FastifyRequest } from 'fastify';
 import { sql } from '../db/client.js';
 import { readCookie, failure } from '../lib/http.js';
 import { randomToken, sha256 } from '../lib/security.js';
+import { sessionsRepository } from '../repositories/sessions.repository.js';
+import type { LoginMetadata } from './geo.service.js';
 
 const SESSION_DAYS = 7;
 
@@ -14,33 +16,32 @@ export interface SessionUser {
   mobile: string;
   mobile_verified_at: Date | null;
   session_id: string;
+  role: 'user' | 'admin' | 'super_admin';
 }
+
 
 export async function createSession(
   userId: string,
-  userAgent?: string
+  metadata: LoginMetadata
 ): Promise<string> {
   const token = randomToken();
+
   const tokenHash = sha256(token);
 
-  await sql`
-    INSERT INTO sessions (
-      id,
-      user_id,
-      token_hash,
-      user_agent,
-      expires_at
-    )
-    VALUES (
-      ${randomUUID()},
-      ${userId},
-      ${tokenHash},
-      ${userAgent ?? null},
-      NOW() + (${SESSION_DAYS} * INTERVAL '1 day')
-    )
-  `;
+  const sessionId = randomUUID();
 
-  // Only its SHA-256 hash is stored in PostgreSQL.
+  const expiresAt = new Date(
+    Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  await sessionsRepository.create(
+    sessionId,
+    userId,
+    tokenHash,
+    expiresAt,
+    metadata
+  );
+
   return token;
 }
 
@@ -61,6 +62,7 @@ export async function currentSession(
       u.display_name,
       u.mobile,
       u.mobile_verified_at,
+      u.role,
       s.id AS session_id
     FROM sessions s
     JOIN users u ON u.id = s.user_id
@@ -68,6 +70,7 @@ export async function currentSession(
       AND s.revoked_at IS NULL
       AND s.expires_at > NOW()
       AND u.status = 'active'
+      AND u.disabled_at IS NULL
     LIMIT 1
   `;
 
@@ -83,6 +86,7 @@ export async function currentSession(
     mobile: user.mobile,
     mobile_verified_at: user.mobile_verified_at,
     session_id: user.session_id,
+    role: user.role,
   };
 }
 
@@ -101,6 +105,7 @@ export async function requireSession(
 
   return user;
 }
+
 
 export async function revokeAll(
   userId: string

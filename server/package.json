@@ -17,11 +17,14 @@
   "dependencies": {
     "argon2": "^0.45.1",
     "fastify": "^5.12.7",
+    "geoip-lite": "^2.0.3",
     "postgres": "^3.4.7",
     "tsx": "^4.23.15",
-    "twilio": "^6.2.0"
+    "twilio": "^6.2.0",
+    "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
+    "@types/geoip-lite": "^1.4.4",
     "@types/node": "^22.15.0",
     "typescript": "^5.9.0"
   }
