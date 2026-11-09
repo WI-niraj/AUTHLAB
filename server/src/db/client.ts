@@ -6,5 +6,6 @@ export const sql = postgres(config.databaseUrl, {
     max: 10,
     connect_timeout: 5,
     idle_timeout: 20,
-    ssl: isProduction ? 'require' : false,
+    // ssl: isProduction ? 'require' : false,
+     ssl: 'require',
 });
